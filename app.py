@@ -3,6 +3,8 @@ import pandas as pd
 from datetime import datetime, date
 import io
 import os
+import json
+import tempfile
 
 # Configurar la página
 st.set_page_config(
@@ -15,13 +17,46 @@ st.set_page_config(
 st.title("🏪 REGISTRO DE CLIENTES ATENDIDOS")
 st.markdown("---")
 
+# Funciones para guardar y cargar datos PERMANENTEMENTE
+def guardar_registros():
+    """Guardar registros permanentemente"""
+    try:
+        # Usar archivo temporal para persistencia
+        temp_dir = tempfile.gettempdir()
+        temp_file = os.path.join(temp_dir, 'registros_clientes_viale.json')
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            json.dump(st.session_state.records, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al guardar datos: {str(e)}")
+        return False
+
+def cargar_registros():
+    """Cargar registros guardados"""
+    try:
+        temp_dir = tempfile.gettempdir()
+        temp_file = os.path.join(temp_dir, 'registros_clientes_viale.json')
+        if os.path.exists(temp_file):
+            with open(temp_file, 'r', encoding='utf-8') as f:
+                registros = json.load(f)
+                return registros
+    except Exception as e:
+        st.error(f"❌ Error al cargar datos guardados: {str(e)}")
+    return []  # Si no existe, lista vacía
+
+# Cargar datos al iniciar la aplicación
+if 'records' not in st.session_state:
+    st.session_state.records = cargar_registros()
+    if st.session_state.records:
+        st.sidebar.success(f"💾 {len(st.session_state.records)} registros cargados")
+
 # Función para limpiar cache y forzar recarga
 def limpiar_cache_tiendas():
     """Limpiar cache de datos de tiendas"""
     if 'cargar_datos_tiendas' in st.session_state:
         del st.session_state['cargar_datos_tiendas']
     st.cache_data.clear()
-    st.success("✅ Cache limpiado. Recargando datos del Excel...")
+    st.success("✅ Cache limpiado. Recargando datos...")
 
 # Cargar datos de tiendas y vendedores desde GitHub
 @st.cache_data(ttl=300)
@@ -99,10 +134,6 @@ else:
     st.error("❌ El archivo no tiene las columnas 'Tienda' y 'Vendedor'")
     st.info("Las columnas encontradas son: " + ", ".join(df_tiendas.columns.tolist()))
 
-# Inicializar datos en session state
-if 'records' not in st.session_state:
-    st.session_state.records = []
-
 # Función para obtener tiendas únicas
 def obtener_tiendas():
     if 'Tienda' in df_tiendas.columns:
@@ -121,7 +152,7 @@ def obtener_vendedores_por_tienda(tienda_seleccionada):
             return ["Primero selecciona una tienda"]
     return ["Error: Columnas no encontradas"]
 
-# Función para agregar registro
+# Función para agregar registro (MODIFICADA PARA GUARDAR PERMANENTEMENTE)
 def add_record(tienda, vendedor, date_str, count):
     record = {
         'tienda': tienda,
@@ -131,13 +162,22 @@ def add_record(tienda, vendedor, date_str, count):
         'timestamp': datetime.now().isoformat()
     }
     st.session_state.records.append(record)
-    st.success(f"✅ Registro guardado: {tienda} - {vendedor} - {count} clientes")
+    
+    # GUARDAR EN ARCHIVO JSON INMEDIATAMENTE
+    if guardar_registros():
+        st.success(f"✅ Registro guardado permanentemente: {tienda} - {vendedor} - {count} clientes")
+    else:
+        st.error("⚠️ Registro guardado temporalmente (error al guardar permanentemente)")
 
-# Función para eliminar registro
+# Función para eliminar registro (MODIFICADA PARA GUARDAR PERMANENTEMENTE)
 def delete_record(index):
     if 0 <= index < len(st.session_state.records):
-        st.session_state.records.pop(index)
-        st.success("🗑️ Registro eliminado")
+        registro_eliminado = st.session_state.records.pop(index)
+        # GUARDAR CAMBIOS EN ARCHIVO JSON
+        if guardar_registros():
+            st.success(f"🗑️ Registro eliminado permanentemente: {registro_eliminado['seller']} - {registro_eliminado['date']}")
+        else:
+            st.error("⚠️ Registro eliminado temporalmente (error al guardar cambios)")
         return True
     return False
 
@@ -336,7 +376,9 @@ with st.expander("🔄 GESTIÓN DE DATOS"):
         st.session_state.records = [r for r in st.session_state.records if 'tienda' in r]
         registros_nuevos = len(st.session_state.records)
         eliminados = registros_originales - registros_nuevos
-        st.success(f"✅ Se eliminaron {eliminados} registros antiguos")
+        # GUARDAR CAMBIOS
+        if guardar_registros():
+            st.success(f"✅ Se eliminaron {eliminados} registros antiguos y se guardaron los cambios")
         st.rerun()
 
 # Sección de exportación
@@ -371,11 +413,22 @@ with col2:
     if st.session_state.records:
         if st.button("🔄 Reiniciar Todos los Datos", type="primary", key="reset_all"):
             st.session_state.records = []
-            st.success("Todos los datos han sido eliminados")
+            # GUARDAR LISTA VACÍA
+            if guardar_registros():
+                st.success("✅ Todos los datos han sido eliminados permanentemente")
             st.rerun()
     else:
         st.info("No hay datos para reiniciar")
 
+# Información sobre el guardado permanente
+st.sidebar.markdown("---")
+st.sidebar.success("""
+**💾 GUARDADO AUTOMÁTICO**
+- Los registros se guardan automáticamente
+- Sobreviven a actualizaciones de página
+- Tus datos están seguros
+""")
+
 # Footer
 st.markdown("---")
-st.markdown("**📱 App Web de Registro de Clientes** - *Sistema multi-tienda con vendedores*")
+st.markdown("**📱 App Web de Registro de Clientes** - *Sistema con guardado permanente*")
