@@ -15,73 +15,59 @@ st.set_page_config(
 st.title("🏪 REGISTRO DE CLIENTES ATENDIDOS")
 st.markdown("---")
 
-# Ruta específica del archivo Excel
-RUTA_ARCHIVO = r"D:\Users\usuario\Desktop\VIALE\APP\Asesores"
-
 # Función para limpiar cache y forzar recarga
 def limpiar_cache_tiendas():
     """Limpiar cache de datos de tiendas"""
     if 'cargar_datos_tiendas' in st.session_state:
         del st.session_state['cargar_datos_tiendas']
     st.cache_data.clear()
+    st.success("✅ Cache limpiado. Recargando datos del Excel...")
 
-# Cargar datos de tiendas y vendedores
-@st.cache_data(ttl=300)  # Cache por 5 minutos en lugar de permanente
+# Cargar datos de tiendas y vendedores desde GitHub
+@st.cache_data(ttl=300)
 def cargar_datos_tiendas():
-    """Cargar datos de tiendas y vendedores desde la ruta específica"""
+    """Cargar datos de tiendas y vendedores desde el archivo en GitHub"""
     try:
-        # Buscar archivos Excel en la ruta especificada
-        if os.path.exists(RUTA_ARCHIVO):
-            # Si es un directorio, buscar archivos Excel dentro
-            if os.path.isdir(RUTA_ARCHIVO):
-                archivos = os.listdir(RUTA_ARCHIVO)
-                archivos_excel = [f for f in archivos if f.endswith(('.xlsx', '.xls'))]
-                
-                if archivos_excel:
-                    # Tomar el primer archivo Excel encontrado
-                    archivo_path = os.path.join(RUTA_ARCHIVO, archivos_excel[0])
-                    st.success(f"📁 Archivo cargado: {archivos_excel[0]}")
-                    df = pd.read_excel(archivo_path)
-                    st.info(f"📊 Se cargaron {len(df)} registros de tiendas y vendedores")
-                    return df
-                else:
-                    st.error("❌ No se encontraron archivos Excel en la ruta especificada")
-            else:
-                # Si es un archivo directo
-                return pd.read_excel(RUTA_ARCHIVO)
+        # Intentar cargar el archivo "Asesores.xlsx" desde GitHub
+        try:
+            df = pd.read_excel("Asesores.xlsx")
+            st.success("📁 Archivo cargado: Asesores.xlsx")
+            st.info(f"📊 Se cargaron {len(df)} registros de tiendas y vendedores")
+            return df
+        except Exception as e:
+            st.warning(f"⚠️ No se pudo cargar 'Asesores.xlsx': {str(e)}")
         
-        # Si no se encuentra, buscar en ubicaciones alternativas
-        st.warning("⚠️ No se encontró el archivo en la ruta especificada. Buscando alternativas...")
-        
-        # Buscar en otras ubicaciones posibles
-        ubicaciones_alternativas = [
-            r"D:\Users\usuario\Desktop\VIALE\APP\Asesores\*.xlsx",
-            r"D:\Users\usuario\Desktop\VIALE\APP\Asesores\*.xls",
+        # Si falla, buscar otros nombres posibles
+        archivos_posibles = [
+            "Asesores.xls",
+            "asesores.xlsx", 
+            "asesores.xls",
             "tiendas_vendedores.xlsx",
-            "tiendas_vendedores.csv"
+            "tiendas_vendedores.xls"
         ]
         
-        for ubicacion in ubicaciones_alternativas:
-            if "*" in ubicacion:
-                # Buscar archivos con patrón
-                import glob
-                archivos = glob.glob(ubicacion)
-                if archivos:
-                    archivo_path = archivos[0]
-                    st.success(f"📁 Archivo encontrado: {os.path.basename(archivo_path)}")
-                    return pd.read_excel(archivo_path)
-            elif os.path.exists(ubicacion):
-                st.success(f"📁 Archivo encontrado: {os.path.basename(ubicacion)}")
-                if ubicacion.endswith('.csv'):
-                    return pd.read_csv(ubicacion)
-                else:
-                    return pd.read_excel(ubicacion)
+        for archivo in archivos_posibles:
+            try:
+                df = pd.read_excel(archivo)
+                st.success(f"📁 Archivo cargado: {archivo}")
+                st.info(f"📊 Se cargaron {len(df)} registros de tiendas y vendedores")
+                return df
+            except:
+                continue
         
-        # Si no hay archivo, crear datos de ejemplo
-        st.info("📋 No se encontró archivo de tiendas. Usando datos de ejemplo.")
+        # Si no se encuentra ningún archivo
+        st.error("❌ No se encontró el archivo Excel en el repositorio")
+        st.info("""
+        **Para solucionar esto:**
+        1. Sube tu archivo Excel 'Asesores.xlsx' a GitHub
+        2. Asegúrate de que esté en la raíz del repositorio
+        3. Haz clic en '🔄 Recargar Datos de Tiendas' en el sidebar
+        """)
+        
+        # Datos de ejemplo temporal
         datos_ejemplo = {
             'Tienda': ['AL705', 'AL705', 'AL418', 'AL418', 'AL418', 'AL418'],
-            'Vendedor': ['Vendedor AL705-A', 'Vendedor AL705-B', 'JAVIER VLAVERDE', 'Vendedor AL418-B', 'Vendedor AL418-C', 'Vendedor AL418-D']
+            'Vendedor': ['Vendedor AL705-A', 'Vendedor AL705-B', 'KAELIN DÍAZ', 'JAVIER VLAVERDE', 'ISAAC MELENDEZ', 'EDWAR CAMARGO']
         }
         return pd.DataFrame(datos_ejemplo)
         
@@ -89,8 +75,8 @@ def cargar_datos_tiendas():
         st.error(f"❌ Error al cargar datos: {str(e)}")
         # Datos de ejemplo como respaldo
         datos_ejemplo = {
-            'Tienda': ['AL705', 'AL705', 'AL418', 'AL418'],
-            'Vendedor': ['Vendedor AL705-A', 'Vendedor AL705-B', 'JAVIER VLAVERDE', 'Vendedor AL418-B']
+            'Tienda': ['AL705', 'AL705', 'AL418', 'AL418', 'AL418', 'AL418'],
+            'Vendedor': ['Vendedor AL705-A', 'Vendedor AL705-B', 'KAELIN DÍAZ', 'JAVIER VLAVERDE', 'ISAAC MELENDEZ', 'EDWAR CAMARGO']
         }
         return pd.DataFrame(datos_ejemplo)
 
@@ -253,7 +239,6 @@ with st.sidebar:
     
     if st.button("🔄 Recargar Datos de Tiendas", use_container_width=True):
         limpiar_cache_tiendas()
-        st.success("✅ Cache limpiado. Recargando aplicación...")
         st.rerun()
     
     st.info("""
