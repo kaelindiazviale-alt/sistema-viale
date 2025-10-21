@@ -152,20 +152,22 @@ def obtener_vendedores_por_tienda(tienda_seleccionada):
             return ["Primero selecciona una tienda"]
     return ["Error: Columnas no encontradas"]
 
-# Función para agregar registro (MODIFICADA PARA GUARDAR PERMANENTEMENTE)
-def add_record(tienda, vendedor, date_str, count):
+# Función para agregar registro (MODIFICADA PARA INCLUIR NUEVOS CAMPOS)
+def add_record(tienda, vendedor, date_str, count, tickets, soles):
     record = {
         'tienda': tienda,
         'seller': vendedor,
         'date': date_str,
         'count': count,
+        'tickets': tickets,
+        'soles': soles,
         'timestamp': datetime.now().isoformat()
     }
     st.session_state.records.append(record)
     
     # GUARDAR EN ARCHIVO JSON INMEDIATAMENTE
     if guardar_registros():
-        st.success(f"✅ Registro guardado permanentemente: {tienda} - {vendedor} - {count} clientes")
+        st.success(f"✅ Registro guardado permanentemente: {tienda} - {vendedor} - {count} clientes - {tickets} tickets - S/. {soles}")
     else:
         st.error("⚠️ Registro guardado temporalmente (error al guardar permanentemente)")
 
@@ -185,26 +187,41 @@ def delete_record(index):
 def formatear_registro_para_mostrar(index):
     record = st.session_state.records[index]
     if 'tienda' in record:
-        return f"{record['tienda']} - {record['seller']} - {record['date']} - {record['count']} clientes"
+        return f"{record['tienda']} - {record['seller']} - {record['date']} - {record['count']} clientes - {record['tickets']} tickets - S/. {record['soles']}"
     else:
         return f"{record['seller']} - {record['date']} - {record['count']} clientes (registro antiguo)"
 
-# Función para obtener estadísticas
+# Función para calcular porcentaje (sin decimales)
+def calcular_porcentaje(tickets, clientes):
+    if clientes == 0:
+        return 0
+    porcentaje = (tickets / clientes) * 100
+    return int(round(porcentaje))  # Sin decimales
+
+# Función para obtener estadísticas (ACTUALIZADA CON NUEVOS CAMPOS)
 def get_stats():
     if not st.session_state.records:
         return {
             'total_clients': 0,
             'total_records': 0,
+            'total_tickets': 0,
+            'total_soles': 0,
             'top_seller': {'name': 'N/A', 'count': 0},
             'top_tienda': {'name': 'N/A', 'count': 0},
-            'avg_per_day': 0
+            'avg_per_day': 0,
+            'avg_tickets_per_day': 0,
+            'avg_soles_per_day': 0
         }
     
     df = pd.DataFrame(st.session_state.records)
     df['count'] = pd.to_numeric(df['count'])
+    df['tickets'] = pd.to_numeric(df['tickets'])
+    df['soles'] = pd.to_numeric(df['soles'])
     
     total_clients = df['count'].sum()
     total_records = len(df)
+    total_tickets = df['tickets'].sum()
+    total_soles = df['soles'].sum()
     
     seller_stats = df.groupby('seller')['count'].sum()
     top_seller = seller_stats.idxmax()
@@ -219,13 +236,19 @@ def get_stats():
             top_tienda_count = tienda_stats.max()
     
     avg_per_day = df['count'].mean()
+    avg_tickets_per_day = df['tickets'].mean()
+    avg_soles_per_day = df['soles'].mean()
     
     return {
         'total_clients': total_clients,
         'total_records': total_records,
+        'total_tickets': total_tickets,
+        'total_soles': total_soles,
         'top_seller': {'name': top_seller, 'count': top_seller_count},
         'top_tienda': {'name': top_tienda_name, 'count': top_tienda_count},
-        'avg_per_day': round(avg_per_day, 1)
+        'avg_per_day': round(avg_per_day, 1),
+        'avg_tickets_per_day': round(avg_tickets_per_day, 1),
+        'avg_soles_per_day': round(avg_soles_per_day, 1)
     }
 
 # Sidebar para nuevo registro
@@ -261,11 +284,13 @@ with st.sidebar:
         # Resto de campos
         fecha = st.date_input("📅 Fecha:", value=date.today(), key="fecha_input")
         count = st.number_input("✅ Cantidad de clientes:", min_value=1, value=1, key="count_input")
+        tickets = st.number_input("🎫 Cantidad de Tickets:", min_value=0, value=0, key="tickets_input")
+        soles = st.number_input("💰 Cantidad Soles (S/.):", min_value=0.0, value=0.0, step=0.1, format="%.2f", key="soles_input")
         
         # Botón de guardar separado
         if st.button("💾 Guardar Registro", type="primary", use_container_width=True):
             if tienda_seleccionada and vendedor_seleccionado and vendedor_seleccionado not in ["No hay vendedores para esta tienda", "Primero selecciona una tienda"]:
-                add_record(tienda_seleccionada, vendedor_seleccionado, fecha.isoformat(), count)
+                add_record(tienda_seleccionada, vendedor_seleccionado, fecha.isoformat(), count, tickets, soles)
                 st.rerun()
             else:
                 st.error("❌ Debes seleccionar una tienda y un vendedor válido")
@@ -314,13 +339,26 @@ with col1:
                 # Crear DataFrame para este vendedor
                 df_vendedor = pd.DataFrame(registros_vendedor)
                 df_vendedor['Fecha'] = pd.to_datetime(df_vendedor['date']).dt.strftime('%d/%m/%Y')
+                
+                # Calcular porcentaje para cada registro
+                df_vendedor['Porcentaje'] = df_vendedor.apply(
+                    lambda row: calcular_porcentaje(row['tickets'], row['count']), 
+                    axis=1
+                )
+                
                 df_vendedor = df_vendedor.sort_values('date', ascending=False)
                 
                 # Mostrar cuadro para este vendedor
                 with st.expander(f"👤 {vendedor} - {len(registros_vendedor)} registros", expanded=True):
                     st.dataframe(
-                        df_vendedor[['Fecha', 'tienda', 'seller', 'count']].rename(
-                            columns={'tienda': 'Tienda', 'seller': 'Vendedor', 'count': 'Clientes'}
+                        df_vendedor[['Fecha', 'tienda', 'seller', 'count', 'tickets', 'soles', 'Porcentaje']].rename(
+                            columns={
+                                'tienda': 'Tienda', 
+                                'seller': 'Vendedor', 
+                                'count': 'Clientes',
+                                'tickets': 'Tickets',
+                                'soles': 'Soles (S/.)'
+                            }
                         ),
                         width='stretch',
                         hide_index=True
@@ -328,18 +366,35 @@ with col1:
                     
                     # Mostrar estadísticas rápidas del vendedor
                     total_clientes_vendedor = sum([r['count'] for r in registros_vendedor])
+                    total_tickets_vendedor = sum([r['tickets'] for r in registros_vendedor])
+                    total_soles_vendedor = sum([r['soles'] for r in registros_vendedor])
                     promedio_vendedor = total_clientes_vendedor / len(registros_vendedor) if registros_vendedor else 0
+                    porcentaje_promedio = calcular_porcentaje(total_tickets_vendedor, total_clientes_vendedor)
                     
-                    col_stat1, col_stat2 = st.columns(2)
+                    col_stat1, col_stat2, col_stat3 = st.columns(3)
                     with col_stat1:
-                        st.metric(f"Total Clientes - {vendedor}", total_clientes_vendedor)
+                        st.metric(f"Total Clientes", total_clientes_vendedor)
                     with col_stat2:
-                        st.metric(f"Promedio por día - {vendedor}", round(promedio_vendedor, 1))
+                        st.metric(f"Total Tickets", total_tickets_vendedor)
+                    with col_stat3:
+                        st.metric(f"Porcentaje", f"{porcentaje_promedio}%")
+                    
+                    col_stat4, col_stat5 = st.columns(2)
+                    with col_stat4:
+                        st.metric(f"Total Soles", f"S/. {total_soles_vendedor:,.2f}")
+                    with col_stat5:
+                        st.metric(f"Promedio por día", round(promedio_vendedor, 1))
         
         # Mostrar tabla completa de todos los registros (como antes) en un expander
         with st.expander("📊 VER TODOS LOS REGISTROS (TODAS LAS TIENDAS)"):
             df_display = pd.DataFrame(st.session_state.records)
             df_display['Fecha'] = pd.to_datetime(df_display['date']).dt.strftime('%d/%m/%Y')
+            
+            # Calcular porcentaje para todos los registros
+            df_display['Porcentaje'] = df_display.apply(
+                lambda row: calcular_porcentaje(row['tickets'], row['count']), 
+                axis=1
+            )
             
             if 'tienda' in df_display.columns:
                 df_display['Tienda'] = df_display['tienda']
@@ -348,11 +403,13 @@ with col1:
                 
             df_display['Vendedor'] = df_display['seller']
             df_display['Clientes'] = df_display['count']
+            df_display['Tickets'] = df_display['tickets']
+            df_display['Soles (S/.)'] = df_display['soles']
             
             df_display = df_display.sort_values('date', ascending=False)
             
             st.dataframe(
-                df_display[['Fecha', 'Tienda', 'Vendedor', 'Clientes']],
+                df_display[['Fecha', 'Tienda', 'Vendedor', 'Clientes', 'Tickets', 'Soles (S/.)', 'Porcentaje']],
                 width='stretch',
                 hide_index=True
             )
@@ -376,15 +433,25 @@ with col2:
     stats = get_stats()
     
     st.metric("👥 Total Clientes", stats['total_clients'])
+    st.metric("🎫 Total Tickets", stats['total_tickets'])
+    st.metric("💰 Total Soles", f"S/. {stats['total_soles']:,.2f}")
     st.metric("📋 Total Registros", stats['total_records'])
     st.metric("⭐ Vendedor Top", f"{stats['top_seller']['name']} ({stats['top_seller']['count']})")
     st.metric("🏪 Tienda Top", f"{stats['top_tienda']['name']} ({stats['top_tienda']['count']})")
-    st.metric("📅 Promedio por día", stats['avg_per_day'])
+    st.metric("📅 Promedio Clientes/día", stats['avg_per_day'])
+    st.metric("📊 Promedio Tickets/día", stats['avg_tickets_per_day'])
+    st.metric("💵 Promedio Soles/día", f"S/. {stats['avg_soles_per_day']:,.2f}")
+    
+    # Calcular porcentaje general
+    porcentaje_general = calcular_porcentaje(stats['total_tickets'], stats['total_clients'])
+    st.metric("📈 Porcentaje General", f"{porcentaje_general}%")
     
     if st.session_state.records:
         st.subheader("📈 Gráficos")
         df = pd.DataFrame(st.session_state.records)
         df['count'] = pd.to_numeric(df['count'])
+        df['tickets'] = pd.to_numeric(df['tickets'])
+        df['soles'] = pd.to_numeric(df['soles'])
         
         seller_totals = df.groupby('seller')['count'].sum()
         st.bar_chart(seller_totals)
@@ -432,6 +499,13 @@ with col1:
     if st.session_state.records:
         df = pd.DataFrame(st.session_state.records)
         df['date'] = pd.to_datetime(df['date'])
+        
+        # Calcular porcentaje para el Excel
+        df['Porcentaje'] = df.apply(
+            lambda row: calcular_porcentaje(row['tickets'], row['count']), 
+            axis=1
+        )
+        
         df = df.sort_values('date', ascending=False)
         
         output = io.BytesIO()
