@@ -297,24 +297,65 @@ with col1:
     if not st.session_state.records:
         st.info("📝 No hay registros aún. Agrega el primero en el panel izquierdo.")
     else:
-        df_display = pd.DataFrame(st.session_state.records)
-        df_display['Fecha'] = pd.to_datetime(df_display['date']).dt.strftime('%d/%m/%Y')
+        # Filtrar registros por la tienda seleccionada en el sidebar
+        registros_filtrados = [r for r in st.session_state.records if r.get('tienda') == tienda_seleccionada]
         
-        if 'tienda' in df_display.columns:
-            df_display['Tienda'] = df_display['tienda']
+        if not registros_filtrados:
+            st.info(f"📝 No hay registros para la tienda {tienda_seleccionada}.")
         else:
-            df_display['Tienda'] = 'N/A'
+            # Obtener vendedores únicos de la tienda seleccionada
+            vendedores_tienda = list(set([r['seller'] for r in registros_filtrados]))
             
-        df_display['Vendedor'] = df_display['seller']
-        df_display['Clientes'] = df_display['count']
+            # Mostrar cuadros separados para cada vendedor
+            for vendedor in vendedores_tienda:
+                # Filtrar registros del vendedor actual
+                registros_vendedor = [r for r in registros_filtrados if r['seller'] == vendedor]
+                
+                # Crear DataFrame para este vendedor
+                df_vendedor = pd.DataFrame(registros_vendedor)
+                df_vendedor['Fecha'] = pd.to_datetime(df_vendedor['date']).dt.strftime('%d/%m/%Y')
+                df_vendedor = df_vendedor.sort_values('date', ascending=False)
+                
+                # Mostrar cuadro para este vendedor
+                with st.expander(f"👤 {vendedor} - {len(registros_vendedor)} registros", expanded=True):
+                    st.dataframe(
+                        df_vendedor[['Fecha', 'tienda', 'seller', 'count']].rename(
+                            columns={'tienda': 'Tienda', 'seller': 'Vendedor', 'count': 'Clientes'}
+                        ),
+                        width='stretch',
+                        hide_index=True
+                    )
+                    
+                    # Mostrar estadísticas rápidas del vendedor
+                    total_clientes_vendedor = sum([r['count'] for r in registros_vendedor])
+                    promedio_vendedor = total_clientes_vendedor / len(registros_vendedor) if registros_vendedor else 0
+                    
+                    col_stat1, col_stat2 = st.columns(2)
+                    with col_stat1:
+                        st.metric(f"Total Clientes - {vendedor}", total_clientes_vendedor)
+                    with col_stat2:
+                        st.metric(f"Promedio por día - {vendedor}", round(promedio_vendedor, 1))
         
-        df_display = df_display.sort_values('date', ascending=False)
-        
-        st.dataframe(
-            df_display[['Fecha', 'Tienda', 'Vendedor', 'Clientes']],
-            width='stretch',
-            hide_index=True
-        )
+        # Mostrar tabla completa de todos los registros (como antes) en un expander
+        with st.expander("📊 VER TODOS LOS REGISTROS (TODAS LAS TIENDAS)"):
+            df_display = pd.DataFrame(st.session_state.records)
+            df_display['Fecha'] = pd.to_datetime(df_display['date']).dt.strftime('%d/%m/%Y')
+            
+            if 'tienda' in df_display.columns:
+                df_display['Tienda'] = df_display['tienda']
+            else:
+                df_display['Tienda'] = 'N/A'
+                
+            df_display['Vendedor'] = df_display['seller']
+            df_display['Clientes'] = df_display['count']
+            
+            df_display = df_display.sort_values('date', ascending=False)
+            
+            st.dataframe(
+                df_display[['Fecha', 'Tienda', 'Vendedor', 'Clientes']],
+                width='stretch',
+                hide_index=True
+            )
         
         st.subheader("🗑️ Eliminar Registros")
         if st.session_state.records:
