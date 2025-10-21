@@ -187,16 +187,26 @@ def delete_record(index):
 def formatear_registro_para_mostrar(index):
     record = st.session_state.records[index]
     if 'tienda' in record:
-        return f"{record['tienda']} - {record['seller']} - {record['date']} - {record['count']} clientes - {record['tickets']} tickets - S/. {record['soles']}"
+        tickets = record.get('tickets', 'N/A')
+        soles = record.get('soles', 'N/A')
+        return f"{record['tienda']} - {record['seller']} - {record['date']} - {record['count']} clientes - {tickets} tickets - S/. {soles}"
     else:
         return f"{record['seller']} - {record['date']} - {record['count']} clientes (registro antiguo)"
 
-# Función para calcular porcentaje (sin decimales)
+# Función para calcular porcentaje (sin decimales) con manejo de errores
 def calcular_porcentaje(tickets, clientes):
-    if clientes == 0:
+    try:
+        if clientes == 0:
+            return 0
+        porcentaje = (tickets / clientes) * 100
+        return int(round(porcentaje))  # Sin decimales
+    except (TypeError, ZeroDivisionError):
         return 0
-    porcentaje = (tickets / clientes) * 100
-    return int(round(porcentaje))  # Sin decimales
+
+# Función para obtener valores seguros de los registros
+def obtener_valor_seguro(record, campo, default=0):
+    """Obtener valor de un campo de manera segura"""
+    return record.get(campo, default)
 
 # Función para obtener estadísticas (ACTUALIZADA CON NUEVOS CAMPOS)
 def get_stats():
@@ -213,31 +223,54 @@ def get_stats():
             'avg_soles_per_day': 0
         }
     
-    df = pd.DataFrame(st.session_state.records)
-    df['count'] = pd.to_numeric(df['count'])
-    df['tickets'] = pd.to_numeric(df['tickets'])
-    df['soles'] = pd.to_numeric(df['soles'])
+    # Usar valores por defecto para registros antiguos
+    total_clients = 0
+    total_tickets = 0
+    total_soles = 0
     
-    total_clients = df['count'].sum()
-    total_records = len(df)
-    total_tickets = df['tickets'].sum()
-    total_soles = df['soles'].sum()
+    for record in st.session_state.records:
+        total_clients += obtener_valor_seguro(record, 'count', 0)
+        total_tickets += obtener_valor_seguro(record, 'tickets', 0)
+        total_soles += obtener_valor_seguro(record, 'soles', 0)
     
-    seller_stats = df.groupby('seller')['count'].sum()
-    top_seller = seller_stats.idxmax()
-    top_seller_count = seller_stats.max()
+    total_records = len(st.session_state.records)
+    
+    # Calcular top seller
+    seller_stats = {}
+    for record in st.session_state.records:
+        seller = record.get('seller', 'Desconocido')
+        count = obtener_valor_seguro(record, 'count', 0)
+        if seller in seller_stats:
+            seller_stats[seller] += count
+        else:
+            seller_stats[seller] = count
+    
+    top_seller = 'N/A'
+    top_seller_count = 0
+    if seller_stats:
+        top_seller = max(seller_stats, key=seller_stats.get)
+        top_seller_count = seller_stats[top_seller]
+    
+    # Calcular top tienda
+    tienda_stats = {}
+    for record in st.session_state.records:
+        tienda = record.get('tienda', 'Desconocido')
+        count = obtener_valor_seguro(record, 'count', 0)
+        if tienda in tienda_stats:
+            tienda_stats[tienda] += count
+        else:
+            tienda_stats[tienda] = count
     
     top_tienda_name = 'N/A'
     top_tienda_count = 0
-    if 'tienda' in df.columns:
-        tienda_stats = df.groupby('tienda')['count'].sum()
-        if not tienda_stats.empty:
-            top_tienda_name = tienda_stats.idxmax()
-            top_tienda_count = tienda_stats.max()
+    if tienda_stats:
+        top_tienda_name = max(tienda_stats, key=tienda_stats.get)
+        top_tienda_count = tienda_stats[top_tienda_name]
     
-    avg_per_day = df['count'].mean()
-    avg_tickets_per_day = df['tickets'].mean()
-    avg_soles_per_day = df['soles'].mean()
+    # Calcular promedios
+    avg_per_day = total_clients / total_records if total_records > 0 else 0
+    avg_tickets_per_day = total_tickets / total_records if total_records > 0 else 0
+    avg_soles_per_day = total_soles / total_records if total_records > 0 else 0
     
     return {
         'total_clients': total_clients,
@@ -336,80 +369,82 @@ with col1:
                 # Filtrar registros del vendedor actual
                 registros_vendedor = [r for r in registros_filtrados if r['seller'] == vendedor]
                 
-                # Crear DataFrame para este vendedor
-                df_vendedor = pd.DataFrame(registros_vendedor)
-                df_vendedor['Fecha'] = pd.to_datetime(df_vendedor['date']).dt.strftime('%d/%m/%Y')
+                # Crear DataFrame para este vendedor con manejo seguro de campos
+                datos_vendedor = []
+                for registro in registros_vendedor:
+                    fecha_str = pd.to_datetime(registro['date']).strftime('%d/%m/%Y')
+                    clientes = obtener_valor_seguro(registro, 'count', 0)
+                    tickets = obtener_valor_seguro(registro, 'tickets', 0)
+                    soles = obtener_valor_seguro(registro, 'soles', 0)
+                    porcentaje = calcular_porcentaje(tickets, clientes)
+                    
+                    datos_vendedor.append({
+                        'Fecha': fecha_str,
+                        'Tienda': registro.get('tienda', 'N/A'),
+                        'Vendedor': registro.get('seller', 'N/A'),
+                        'Clientes': clientes,
+                        'Tickets': tickets,
+                        'Soles (S/.)': soles,
+                        'Porcentaje': f"{porcentaje}%"
+                    })
                 
-                # Calcular porcentaje para cada registro
-                df_vendedor['Porcentaje'] = df_vendedor.apply(
-                    lambda row: calcular_porcentaje(row['tickets'], row['count']), 
-                    axis=1
-                )
-                
-                df_vendedor = df_vendedor.sort_values('date', ascending=False)
+                df_vendedor = pd.DataFrame(datos_vendedor)
+                df_vendedor = df_vendedor.sort_values('Fecha', ascending=False)
                 
                 # Mostrar cuadro para este vendedor
                 with st.expander(f"👤 {vendedor} - {len(registros_vendedor)} registros", expanded=True):
                     st.dataframe(
-                        df_vendedor[['Fecha', 'tienda', 'seller', 'count', 'tickets', 'soles', 'Porcentaje']].rename(
-                            columns={
-                                'tienda': 'Tienda', 
-                                'seller': 'Vendedor', 
-                                'count': 'Clientes',
-                                'tickets': 'Tickets',
-                                'soles': 'Soles (S/.)'
-                            }
-                        ),
+                        df_vendedor,
                         width='stretch',
                         hide_index=True
                     )
                     
                     # Mostrar estadísticas rápidas del vendedor
-                    total_clientes_vendedor = sum([r['count'] for r in registros_vendedor])
-                    total_tickets_vendedor = sum([r['tickets'] for r in registros_vendedor])
-                    total_soles_vendedor = sum([r['soles'] for r in registros_vendedor])
+                    total_clientes_vendedor = sum([obtener_valor_seguro(r, 'count', 0) for r in registros_vendedor])
+                    total_tickets_vendedor = sum([obtener_valor_seguro(r, 'tickets', 0) for r in registros_vendedor])
+                    total_soles_vendedor = sum([obtener_valor_seguro(r, 'soles', 0) for r in registros_vendedor])
                     promedio_vendedor = total_clientes_vendedor / len(registros_vendedor) if registros_vendedor else 0
                     porcentaje_promedio = calcular_porcentaje(total_tickets_vendedor, total_clientes_vendedor)
                     
                     col_stat1, col_stat2, col_stat3 = st.columns(3)
                     with col_stat1:
-                        st.metric(f"Total Clientes", total_clientes_vendedor)
+                        st.metric("Total Clientes", total_clientes_vendedor)
                     with col_stat2:
-                        st.metric(f"Total Tickets", total_tickets_vendedor)
+                        st.metric("Total Tickets", total_tickets_vendedor)
                     with col_stat3:
-                        st.metric(f"Porcentaje", f"{porcentaje_promedio}%")
+                        st.metric("Porcentaje", f"{porcentaje_promedio}%")
                     
                     col_stat4, col_stat5 = st.columns(2)
                     with col_stat4:
-                        st.metric(f"Total Soles", f"S/. {total_soles_vendedor:,.2f}")
+                        st.metric("Total Soles", f"S/. {total_soles_vendedor:,.2f}")
                     with col_stat5:
-                        st.metric(f"Promedio por día", round(promedio_vendedor, 1))
+                        st.metric("Promedio por día", round(promedio_vendedor, 1))
         
         # Mostrar tabla completa de todos los registros (como antes) en un expander
         with st.expander("📊 VER TODOS LOS REGISTROS (TODAS LAS TIENDAS)"):
-            df_display = pd.DataFrame(st.session_state.records)
-            df_display['Fecha'] = pd.to_datetime(df_display['date']).dt.strftime('%d/%m/%Y')
-            
-            # Calcular porcentaje para todos los registros
-            df_display['Porcentaje'] = df_display.apply(
-                lambda row: calcular_porcentaje(row['tickets'], row['count']), 
-                axis=1
-            )
-            
-            if 'tienda' in df_display.columns:
-                df_display['Tienda'] = df_display['tienda']
-            else:
-                df_display['Tienda'] = 'N/A'
+            datos_completos = []
+            for registro in st.session_state.records:
+                fecha_str = pd.to_datetime(registro['date']).strftime('%d/%m/%Y')
+                clientes = obtener_valor_seguro(registro, 'count', 0)
+                tickets = obtener_valor_seguro(registro, 'tickets', 0)
+                soles = obtener_valor_seguro(registro, 'soles', 0)
+                porcentaje = calcular_porcentaje(tickets, clientes)
                 
-            df_display['Vendedor'] = df_display['seller']
-            df_display['Clientes'] = df_display['count']
-            df_display['Tickets'] = df_display['tickets']
-            df_display['Soles (S/.)'] = df_display['soles']
+                datos_completos.append({
+                    'Fecha': fecha_str,
+                    'Tienda': registro.get('tienda', 'N/A'),
+                    'Vendedor': registro.get('seller', 'N/A'),
+                    'Clientes': clientes,
+                    'Tickets': tickets,
+                    'Soles (S/.)': soles,
+                    'Porcentaje': f"{porcentaje}%"
+                })
             
-            df_display = df_display.sort_values('date', ascending=False)
+            df_completo = pd.DataFrame(datos_completos)
+            df_completo = df_completo.sort_values('Fecha', ascending=False)
             
             st.dataframe(
-                df_display[['Fecha', 'Tienda', 'Vendedor', 'Clientes', 'Tickets', 'Soles (S/.)', 'Porcentaje']],
+                df_completo,
                 width='stretch',
                 hide_index=True
             )
@@ -448,17 +483,24 @@ with col2:
     
     if st.session_state.records:
         st.subheader("📈 Gráficos")
-        df = pd.DataFrame(st.session_state.records)
-        df['count'] = pd.to_numeric(df['count'])
-        df['tickets'] = pd.to_numeric(df['tickets'])
-        df['soles'] = pd.to_numeric(df['soles'])
+        # Crear datos seguros para gráficos
+        datos_grafico = []
+        for record in st.session_state.records:
+            datos_grafico.append({
+                'seller': record.get('seller', 'Desconocido'),
+                'count': obtener_valor_seguro(record, 'count', 0),
+                'tienda': record.get('tienda', 'Desconocido')
+            })
         
-        seller_totals = df.groupby('seller')['count'].sum()
-        st.bar_chart(seller_totals)
+        df_grafico = pd.DataFrame(datos_grafico)
         
-        if 'tienda' in df.columns:
-            tienda_totals = df.groupby('tienda')['count'].sum()
-            st.bar_chart(tienda_totals)
+        if not df_grafico.empty:
+            seller_totals = df_grafico.groupby('seller')['count'].sum()
+            st.bar_chart(seller_totals)
+            
+            if 'tienda' in df_grafico.columns:
+                tienda_totals = df_grafico.groupby('tienda')['count'].sum()
+                st.bar_chart(tienda_totals)
 
 # Sección de datos de tiendas
 with st.expander("🏪 VER DATOS CARGADOS DE TIENDAS Y VENDEDORES"):
@@ -497,20 +539,32 @@ col1, col2 = st.columns(2)
 
 with col1:
     if st.session_state.records:
-        df = pd.DataFrame(st.session_state.records)
-        df['date'] = pd.to_datetime(df['date'])
+        # Crear DataFrame seguro para exportación
+        datos_exportacion = []
+        for record in st.session_state.records:
+            clientes = obtener_valor_seguro(record, 'count', 0)
+            tickets = obtener_valor_seguro(record, 'tickets', 0)
+            soles = obtener_valor_seguro(record, 'soles', 0)
+            porcentaje = calcular_porcentaje(tickets, clientes)
+            
+            datos_exportacion.append({
+                'tienda': record.get('tienda', 'N/A'),
+                'seller': record.get('seller', 'N/A'),
+                'date': record['date'],
+                'count': clientes,
+                'tickets': tickets,
+                'soles': soles,
+                'porcentaje': porcentaje,
+                'timestamp': record.get('timestamp', 'N/A')
+            })
         
-        # Calcular porcentaje para el Excel
-        df['Porcentaje'] = df.apply(
-            lambda row: calcular_porcentaje(row['tickets'], row['count']), 
-            axis=1
-        )
-        
-        df = df.sort_values('date', ascending=False)
+        df_export = pd.DataFrame(datos_exportacion)
+        df_export['date'] = pd.to_datetime(df_export['date'])
+        df_export = df_export.sort_values('date', ascending=False)
         
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='Registros')
+            df_export.to_excel(writer, index=False, sheet_name='Registros')
             df_tiendas.to_excel(writer, index=False, sheet_name='Tiendas_Vendedores')
         
         output.seek(0)
