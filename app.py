@@ -226,8 +226,83 @@ def obtener_valor_seguro(record, campo, default=0):
     """Obtener valor de un campo de manera segura"""
     return record.get(campo, default)
 
-# Función para obtener estadísticas (ACTUALIZADA CON NUEVOS CAMPOS)
-def get_stats():
+# Función para obtener estadísticas por tienda (NUEVA FUNCIÓN)
+def get_stats_por_tienda(tienda_seleccionada):
+    """Obtener estadísticas solo para la tienda seleccionada"""
+    if not st.session_state.records:
+        return {
+            'total_clients': 0,
+            'total_records': 0,
+            'total_tickets': 0,
+            'total_soles': 0,
+            'top_seller': {'name': 'N/A', 'count': 0},
+            'avg_per_day': 0,
+            'avg_tickets_per_day': 0,
+            'avg_soles_per_day': 0
+        }
+    
+    # Filtrar registros por tienda
+    registros_tienda = [r for r in st.session_state.records if r.get('tienda') == tienda_seleccionada]
+    
+    if not registros_tienda:
+        return {
+            'total_clients': 0,
+            'total_records': 0,
+            'total_tickets': 0,
+            'total_soles': 0,
+            'top_seller': {'name': 'N/A', 'count': 0},
+            'avg_per_day': 0,
+            'avg_tickets_per_day': 0,
+            'avg_soles_per_day': 0
+        }
+    
+    # Usar valores por defecto para registros antiguos
+    total_clients = 0
+    total_tickets = 0
+    total_soles = 0
+    
+    for record in registros_tienda:
+        total_clients += obtener_valor_seguro(record, 'count', 0)
+        total_tickets += obtener_valor_seguro(record, 'tickets', 0)
+        total_soles += obtener_valor_seguro(record, 'soles', 0)
+    
+    total_records = len(registros_tienda)
+    
+    # Calcular top seller de la tienda
+    seller_stats = {}
+    for record in registros_tienda:
+        seller = record.get('seller', 'Desconocido')
+        count = obtener_valor_seguro(record, 'count', 0)
+        if seller in seller_stats:
+            seller_stats[seller] += count
+        else:
+            seller_stats[seller] = count
+    
+    top_seller = 'N/A'
+    top_seller_count = 0
+    if seller_stats:
+        top_seller = max(seller_stats, key=seller_stats.get)
+        top_seller_count = seller_stats[top_seller]
+    
+    # Calcular promedios
+    avg_per_day = total_clients / total_records if total_records > 0 else 0
+    avg_tickets_per_day = total_tickets / total_records if total_records > 0 else 0
+    avg_soles_per_day = total_soles / total_records if total_records > 0 else 0
+    
+    return {
+        'total_clients': total_clients,
+        'total_records': total_records,
+        'total_tickets': total_tickets,
+        'total_soles': total_soles,
+        'top_seller': {'name': top_seller, 'count': top_seller_count},
+        'avg_per_day': round(avg_per_day, 1),
+        'avg_tickets_per_day': round(avg_tickets_per_day, 1),
+        'avg_soles_per_day': round(avg_soles_per_day, 1)
+    }
+
+# Función para obtener estadísticas generales (PARA EXPORTACIÓN)
+def get_stats_general():
+    """Obtener estadísticas de todas las tiendas"""
     if not st.session_state.records:
         return {
             'total_clients': 0,
@@ -375,7 +450,7 @@ with st.sidebar:
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    st.header("📋 HISTORIAL DE REGISTROS")
+    st.header(f"📋 HISTORIAL DE REGISTROS - {tienda_seleccionada}")
     
     if not st.session_state.records:
         st.info("📝 No hay registros aún. Agrega el primero en el panel izquierdo.")
@@ -446,90 +521,61 @@ with col1:
                         st.metric("Total Soles", f"S/. {total_soles_vendedor:,.2f}")
                     with col_stat5:
                         st.metric("Promedio por día", round(promedio_vendedor, 1))
-        
-        # Mostrar tabla completa de todos los registros (como antes) en un expander
-        with st.expander("📊 VER TODOS LOS REGISTROS (TODAS LAS TIENDAS)"):
-            datos_completos = []
-            for registro in st.session_state.records:
-                fecha_str = pd.to_datetime(registro['date']).strftime('%d/%m/%Y')
-                clientes = obtener_valor_seguro(registro, 'count', 0)
-                tickets = obtener_valor_seguro(registro, 'tickets', 0)
-                soles = obtener_valor_seguro(registro, 'soles', 0)
-                rango_horario = registro.get('rango_horario', 'N/A')
-                porcentaje = calcular_porcentaje(tickets, clientes)
+            
+            st.subheader("🗑️ Eliminar Registros")
+            # Filtrar índices para mostrar solo los de la tienda seleccionada
+            indices_tienda = [i for i, r in enumerate(st.session_state.records) if r.get('tienda') == tienda_seleccionada]
+            
+            if indices_tienda:
+                record_index_tienda = st.selectbox(
+                    "Selecciona registro a eliminar:",
+                    options=indices_tienda,
+                    format_func=formatear_registro_para_mostrar,
+                    key="delete_selector_tienda"
+                )
                 
-                datos_completos.append({
-                    'Fecha': fecha_str,
-                    'Tienda': registro.get('tienda', 'N/A'),
-                    'Vendedor': registro.get('seller', 'N/A'),
-                    'Rango Horario': rango_horario,
-                    'Clientes': clientes,
-                    'Tickets': tickets,
-                    'Soles (S/.)': soles,
-                    'Porcentaje': f"{porcentaje}%"
-                })
-            
-            df_completo = pd.DataFrame(datos_completos)
-            df_completo = df_completo.sort_values('Fecha', ascending=False)
-            
-            st.dataframe(
-                df_completo,
-                width='stretch',
-                hide_index=True
-            )
-        
-        st.subheader("🗑️ Eliminar Registros")
-        if st.session_state.records:
-            record_index = st.selectbox(
-                "Selecciona registro a eliminar:",
-                range(len(st.session_state.records)),
-                format_func=formatear_registro_para_mostrar,
-                key="delete_selector"
-            )
-            
-            if st.button("Eliminar Registro Seleccionado", type="secondary"):
-                delete_record(record_index)
-                st.rerun()
+                if st.button("Eliminar Registro Seleccionado", type="secondary"):
+                    delete_record(record_index_tienda)
+                    st.rerun()
+            else:
+                st.info("No hay registros para eliminar en esta tienda")
 
 with col2:
-    st.header("📊 ESTADÍSTICAS")
+    st.header(f"📊 ESTADÍSTICAS - {tienda_seleccionada}")
     
-    stats = get_stats()
+    # Usar estadísticas filtradas por tienda
+    stats_tienda = get_stats_por_tienda(tienda_seleccionada)
     
-    st.metric("👥 Total Clientes", stats['total_clients'])
-    st.metric("🎫 Total Tickets", stats['total_tickets'])
-    st.metric("💰 Total Soles", f"S/. {stats['total_soles']:,.2f}")
-    st.metric("📋 Total Registros", stats['total_records'])
-    st.metric("⭐ Vendedor Top", f"{stats['top_seller']['name']} ({stats['top_seller']['count']})")
-    st.metric("🏪 Tienda Top", f"{stats['top_tienda']['name']} ({stats['top_tienda']['count']})")
-    st.metric("📅 Promedio Clientes/día", stats['avg_per_day'])
-    st.metric("📊 Promedio Tickets/día", stats['avg_tickets_per_day'])
-    st.metric("💵 Promedio Soles/día", f"S/. {stats['avg_soles_per_day']:,.2f}")
+    st.metric("👥 Total Clientes", stats_tienda['total_clients'])
+    st.metric("🎫 Total Tickets", stats_tienda['total_tickets'])
+    st.metric("💰 Total Soles", f"S/. {stats_tienda['total_soles']:,.2f}")
+    st.metric("📋 Total Registros", stats_tienda['total_records'])
+    st.metric("⭐ Vendedor Top", f"{stats_tienda['top_seller']['name']} ({stats_tienda['top_seller']['count']})")
+    st.metric("📅 Promedio Clientes/día", stats_tienda['avg_per_day'])
+    st.metric("📊 Promedio Tickets/día", stats_tienda['avg_tickets_per_day'])
+    st.metric("💵 Promedio Soles/día", f"S/. {stats_tienda['avg_soles_per_day']:,.2f}")
     
-    # Calcular porcentaje general
-    porcentaje_general = calcular_porcentaje(stats['total_tickets'], stats['total_clients'])
-    st.metric("📈 Porcentaje General", f"{porcentaje_general}%")
+    # Calcular porcentaje general de la tienda
+    porcentaje_tienda = calcular_porcentaje(stats_tienda['total_tickets'], stats_tienda['total_clients'])
+    st.metric("📈 Porcentaje General", f"{porcentaje_tienda}%")
     
     if st.session_state.records:
         st.subheader("📈 Gráficos")
-        # Crear datos seguros para gráficos
+        # Crear datos seguros para gráficos - SOLO DE LA TIENDA SELECCIONADA
         datos_grafico = []
         for record in st.session_state.records:
-            datos_grafico.append({
-                'seller': record.get('seller', 'Desconocido'),
-                'count': obtener_valor_seguro(record, 'count', 0),
-                'tienda': record.get('tienda', 'Desconocido')
-            })
+            if record.get('tienda') == tienda_seleccionada:
+                datos_grafico.append({
+                    'seller': record.get('seller', 'Desconocido'),
+                    'count': obtener_valor_seguro(record, 'count', 0),
+                    'tienda': record.get('tienda', 'Desconocido')
+                })
         
         df_grafico = pd.DataFrame(datos_grafico)
         
         if not df_grafico.empty:
             seller_totals = df_grafico.groupby('seller')['count'].sum()
-            st.bar_chart(seller_totals)
-            
-            if 'tienda' in df_grafico.columns:
-                tienda_totals = df_grafico.groupby('tienda')['count'].sum()
-                st.bar_chart(tienda_totals)
+            st.bar_chart(seller_totals, use_container_width=True)
 
 # Sección de datos de tiendas
 with st.expander("🏪 VER DATOS CARGADOS DE TIENDAS Y VENDEDORES"):
@@ -554,4 +600,107 @@ with st.expander("🔄 GESTIÓN DE DATOS"):
         registros_originales = len(st.session_state.records)
         st.session_state.records = [r for r in st.session_state.records if 'tienda' in r]
         registros_nuevos = len(st.session_state.records)
-        eliminados = registros_original
+        eliminados = registros_originales - registros_nuevos
+        # GUARDAR CAMBIOS
+        if guardar_registros():
+            st.success(f"✅ Se eliminaron {eliminados} registros antiguos y se guardaron los cambios")
+        st.rerun()
+
+# Sección de exportación
+st.markdown("---")
+st.header("📤 EXPORTAR DATOS")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    if st.session_state.records:
+        # Crear DataFrame seguro para exportación - TODOS LOS REGISTROS
+        datos_exportacion = []
+        for record in st.session_state.records:
+            clientes = obtener_valor_seguro(record, 'count', 0)
+            tickets = obtener_valor_seguro(record, 'tickets', 0)
+            soles = obtener_valor_seguro(record, 'soles', 0)
+            rango_horario = record.get('rango_horario', 'N/A')
+            porcentaje = calcular_porcentaje(tickets, clientes)
+            
+            datos_exportacion.append({
+                'Tienda': record.get('tienda', 'N/A'),
+                'Vendedor': record.get('seller', 'N/A'),
+                'Rango Horario': rango_horario,
+                'Fecha': record['date'],
+                'Clientes': clientes,
+                'Tickets': tickets,
+                'Soles (S/.)': soles,
+                'Porcentaje': f"{porcentaje}%",
+                'Timestamp': record.get('timestamp', 'N/A')
+            })
+        
+        df_export = pd.DataFrame(datos_exportacion)
+        df_export['Fecha'] = pd.to_datetime(df_export['Fecha'])
+        df_export = df_export.sort_values('Fecha', ascending=False)
+        
+        # Obtener estadísticas generales para el reporte
+        stats_general = get_stats_general()
+        
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # Hoja 1: Todos los registros
+            df_export.to_excel(writer, index=False, sheet_name='Todos_Los_Registros')
+            
+            # Hoja 2: Estadísticas generales
+            stats_df = pd.DataFrame([{
+                'Total Clientes': stats_general['total_clients'],
+                'Total Tickets': stats_general['total_tickets'],
+                'Total Soles': stats_general['total_soles'],
+                'Total Registros': stats_general['total_records'],
+                'Vendedor Top': f"{stats_general['top_seller']['name']} ({stats_general['top_seller']['count']})",
+                'Tienda Top': f"{stats_general['top_tienda']['name']} ({stats_general['top_tienda']['count']})",
+                'Promedio Clientes/Día': stats_general['avg_per_day'],
+                'Promedio Tickets/Día': stats_general['avg_tickets_per_day'],
+                'Promedio Soles/Día': stats_general['avg_soles_per_day'],
+                'Porcentaje General': f"{calcular_porcentaje(stats_general['total_tickets'], stats_general['total_clients'])}%"
+            }])
+            stats_df.to_excel(writer, index=False, sheet_name='Estadisticas_Generales')
+            
+            # Hoja 3: Datos de tiendas y vendedores
+            df_tiendas.to_excel(writer, index=False, sheet_name='Tiendas_Vendedores')
+        
+        output.seek(0)
+        
+        st.download_button(
+            label="💾 Descargar Excel Completo (Todas las Tiendas)",
+            data=output,
+            file_name=f"registro_clientes_completo_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            help="Descarga todos los registros de todas las tiendas"
+        )
+        
+        # Mostrar resumen de lo que se va a descargar
+        st.info(f"📊 El archivo incluirá: {len(st.session_state.records)} registros de todas las tiendas")
+        
+    else:
+        st.warning("No hay datos para exportar")
+
+with col2:
+    if st.session_state.records:
+        if st.button("🔄 Reiniciar Todos los Datos", type="primary", key="reset_all"):
+            st.session_state.records = []
+            # GUARDAR LISTA VACÍA
+            if guardar_registros():
+                st.success("✅ Todos los datos han sido eliminados permanentemente")
+            st.rerun()
+    else:
+        st.info("No hay datos para reiniciar")
+
+# Información sobre el guardado permanente
+st.sidebar.markdown("---")
+st.sidebar.success("""
+**💾 GUARDADO AUTOMÁTICO**
+- Los registros se guardan automáticamente
+- Sobreviven a actualizaciones de página
+- Tus datos están seguros
+""")
+
+# Footer
+st.markdown("---")
+st.markdown("**📱 App Web de Registro de Clientes** - *Sistema con guardado permanente*")
