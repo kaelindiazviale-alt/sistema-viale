@@ -17,6 +17,22 @@ st.set_page_config(
 st.title("🏪 REGISTRO DE CLIENTES ATENDIDOS")
 st.markdown("---")
 
+# Lista de rangos de horario
+RANGOS_HORARIO = [
+    "10 a.m - 11 a.m",
+    "11 a.m - 12 p.m", 
+    "12 p.m - 1 p.m",
+    "1 p.m - 2 p.m",
+    "2 p.m - 3 p.m",
+    "3 p.m - 4 p.m",
+    "4 p.m - 5 p.m",
+    "5 p.m - 6 p.m",
+    "6 p.m - 7 p.m",
+    "7 p.m - 8 p.m",
+    "8 p.m - 9 p.m",
+    "9 p.m - 10 p.m"
+]
+
 # Funciones para guardar y cargar datos PERMANENTEMENTE
 def guardar_registros():
     """Guardar registros permanentemente"""
@@ -153,10 +169,11 @@ def obtener_vendedores_por_tienda(tienda_seleccionada):
     return ["Error: Columnas no encontradas"]
 
 # Función para agregar registro (MODIFICADA PARA INCLUIR NUEVOS CAMPOS)
-def add_record(tienda, vendedor, date_str, count, tickets, soles):
+def add_record(tienda, vendedor, rango_horario, date_str, count, tickets, soles):
     record = {
         'tienda': tienda,
         'seller': vendedor,
+        'rango_horario': rango_horario,
         'date': date_str,
         'count': count,
         'tickets': tickets,
@@ -167,7 +184,7 @@ def add_record(tienda, vendedor, date_str, count, tickets, soles):
     
     # GUARDAR EN ARCHIVO JSON INMEDIATAMENTE
     if guardar_registros():
-        st.success(f"✅ Registro guardado permanentemente: {tienda} - {vendedor} - {count} clientes - {tickets} tickets - S/. {soles}")
+        st.success(f"✅ Registro guardado permanentemente: {tienda} - {vendedor} - {rango_horario} - {count} clientes - {tickets} tickets - S/. {soles}")
     else:
         st.error("⚠️ Registro guardado temporalmente (error al guardar permanentemente)")
 
@@ -189,7 +206,8 @@ def formatear_registro_para_mostrar(index):
     if 'tienda' in record:
         tickets = record.get('tickets', 'N/A')
         soles = record.get('soles', 'N/A')
-        return f"{record['tienda']} - {record['seller']} - {record['date']} - {record['count']} clientes - {tickets} tickets - S/. {soles}"
+        rango_horario = record.get('rango_horario', 'N/A')
+        return f"{record['tienda']} - {record['seller']} - {rango_horario} - {record['date']} - {record['count']} clientes - {tickets} tickets - S/. {soles}"
     else:
         return f"{record['seller']} - {record['date']} - {record['count']} clientes (registro antiguo)"
 
@@ -314,6 +332,13 @@ with st.sidebar:
             key="vendedor_selector"
         )
         
+        # Selector de rango horario
+        rango_horario_seleccionado = st.selectbox(
+            "⏰ Selecciona rango de horario:",
+            options=RANGOS_HORARIO,
+            key="rango_horario_selector"
+        )
+        
         # Resto de campos
         fecha = st.date_input("📅 Fecha:", value=date.today(), key="fecha_input")
         count = st.number_input("✅ Cantidad de clientes:", min_value=1, value=1, key="count_input")
@@ -323,7 +348,7 @@ with st.sidebar:
         # Botón de guardar separado
         if st.button("💾 Guardar Registro", type="primary", use_container_width=True):
             if tienda_seleccionada and vendedor_seleccionado and vendedor_seleccionado not in ["No hay vendedores para esta tienda", "Primero selecciona una tienda"]:
-                add_record(tienda_seleccionada, vendedor_seleccionado, fecha.isoformat(), count, tickets, soles)
+                add_record(tienda_seleccionada, vendedor_seleccionado, rango_horario_seleccionado, fecha.isoformat(), count, tickets, soles)
                 st.rerun()
             else:
                 st.error("❌ Debes seleccionar una tienda y un vendedor válido")
@@ -376,12 +401,14 @@ with col1:
                     clientes = obtener_valor_seguro(registro, 'count', 0)
                     tickets = obtener_valor_seguro(registro, 'tickets', 0)
                     soles = obtener_valor_seguro(registro, 'soles', 0)
+                    rango_horario = registro.get('rango_horario', 'N/A')
                     porcentaje = calcular_porcentaje(tickets, clientes)
                     
                     datos_vendedor.append({
                         'Fecha': fecha_str,
                         'Tienda': registro.get('tienda', 'N/A'),
                         'Vendedor': registro.get('seller', 'N/A'),
+                        'Rango Horario': rango_horario,
                         'Clientes': clientes,
                         'Tickets': tickets,
                         'Soles (S/.)': soles,
@@ -428,12 +455,14 @@ with col1:
                 clientes = obtener_valor_seguro(registro, 'count', 0)
                 tickets = obtener_valor_seguro(registro, 'tickets', 0)
                 soles = obtener_valor_seguro(registro, 'soles', 0)
+                rango_horario = registro.get('rango_horario', 'N/A')
                 porcentaje = calcular_porcentaje(tickets, clientes)
                 
                 datos_completos.append({
                     'Fecha': fecha_str,
                     'Tienda': registro.get('tienda', 'N/A'),
                     'Vendedor': registro.get('seller', 'N/A'),
+                    'Rango Horario': rango_horario,
                     'Clientes': clientes,
                     'Tickets': tickets,
                     'Soles (S/.)': soles,
@@ -525,79 +554,4 @@ with st.expander("🔄 GESTIÓN DE DATOS"):
         registros_originales = len(st.session_state.records)
         st.session_state.records = [r for r in st.session_state.records if 'tienda' in r]
         registros_nuevos = len(st.session_state.records)
-        eliminados = registros_originales - registros_nuevos
-        # GUARDAR CAMBIOS
-        if guardar_registros():
-            st.success(f"✅ Se eliminaron {eliminados} registros antiguos y se guardaron los cambios")
-        st.rerun()
-
-# Sección de exportación
-st.markdown("---")
-st.header("📤 EXPORTAR DATOS")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    if st.session_state.records:
-        # Crear DataFrame seguro para exportación
-        datos_exportacion = []
-        for record in st.session_state.records:
-            clientes = obtener_valor_seguro(record, 'count', 0)
-            tickets = obtener_valor_seguro(record, 'tickets', 0)
-            soles = obtener_valor_seguro(record, 'soles', 0)
-            porcentaje = calcular_porcentaje(tickets, clientes)
-            
-            datos_exportacion.append({
-                'tienda': record.get('tienda', 'N/A'),
-                'seller': record.get('seller', 'N/A'),
-                'date': record['date'],
-                'count': clientes,
-                'tickets': tickets,
-                'soles': soles,
-                'porcentaje': porcentaje,
-                'timestamp': record.get('timestamp', 'N/A')
-            })
-        
-        df_export = pd.DataFrame(datos_exportacion)
-        df_export['date'] = pd.to_datetime(df_export['date'])
-        df_export = df_export.sort_values('date', ascending=False)
-        
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_export.to_excel(writer, index=False, sheet_name='Registros')
-            df_tiendas.to_excel(writer, index=False, sheet_name='Tiendas_Vendedores')
-        
-        output.seek(0)
-        
-        st.download_button(
-            label="💾 Descargar Excel Completo",
-            data=output,
-            file_name=f"registro_clientes_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    else:
-        st.warning("No hay datos para exportar")
-
-with col2:
-    if st.session_state.records:
-        if st.button("🔄 Reiniciar Todos los Datos", type="primary", key="reset_all"):
-            st.session_state.records = []
-            # GUARDAR LISTA VACÍA
-            if guardar_registros():
-                st.success("✅ Todos los datos han sido eliminados permanentemente")
-            st.rerun()
-    else:
-        st.info("No hay datos para reiniciar")
-
-# Información sobre el guardado permanente
-st.sidebar.markdown("---")
-st.sidebar.success("""
-**💾 GUARDADO AUTOMÁTICO**
-- Los registros se guardan automáticamente
-- Sobreviven a actualizaciones de página
-- Tus datos están seguros
-""")
-
-# Footer
-st.markdown("---")
-st.markdown("**📱 App Web de Registro de Clientes** - *Sistema con guardado permanente*")
+        eliminados = registros_original
