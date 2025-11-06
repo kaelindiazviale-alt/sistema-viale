@@ -33,6 +33,37 @@ RANGOS_HORARIO = [
     "9 p.m - 10 p.m"
 ]
 
+# Función para verificar contraseña
+def verificar_contraseña():
+    """Verificar si la contraseña es correcta"""
+    contraseña_correcta = "demanda2025"
+    contraseña_ingresada = st.session_state.get('contraseña_input', '')
+    return contraseña_ingresada == contraseña_correcta
+
+# Función para mostrar modal de contraseña
+def mostrar_modal_contraseña(accion):
+    """Mostrar modal para ingresar contraseña"""
+    with st.form(f"form_contraseña_{accion}"):
+        st.write(f"🔒 **{accion}**")
+        contraseña = st.text_input(
+            "Ingrese la contraseña:",
+            type="password",
+            key=f"contraseña_{accion}"
+        )
+        enviado = st.form_submit_button("Aceptar")
+        
+        if enviado:
+            if contraseña == "demanda2025":
+                st.session_state.contraseña_input = contraseña
+                st.session_state[f"acceso_permitido_{accion}"] = True
+                st.success("✅ Contraseña correcta")
+                st.rerun()
+            else:
+                st.error("❌ Contraseña incorrecta")
+                st.session_state.contraseña_input = ""
+                st.session_state[f"acceso_permitido_{accion}"] = False
+    return False
+
 # Funciones para guardar y cargar datos PERMANENTEMENTE
 def guardar_registros():
     """Guardar registros permanentemente"""
@@ -667,13 +698,24 @@ with col1:
         
         output.seek(0)
         
-        st.download_button(
-            label="💾 Descargar Excel Completo (Todas las Tiendas)",
-            data=output,
-            file_name=f"registro_clientes_completo_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            help="Descarga todos los registros de todas las tiendas"
-        )
+        # Botón de descarga con protección por contraseña
+        if st.button("💾 Descargar Excel Completo (Todas las Tiendas)", key="download_excel"):
+            st.session_state.mostrar_modal_descarga = True
+        
+        if st.session_state.get('mostrar_modal_descarga', False):
+            with st.container():
+                st.markdown("---")
+                st.subheader("🔒 Descargar Excel Completo")
+                if mostrar_modal_contraseña("Descargar Excel Completo"):
+                    st.session_state.mostrar_modal_descarga = False
+                    st.download_button(
+                        label="✅ Descargar Ahora",
+                        data=output,
+                        file_name=f"registro_clientes_completo_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        help="Descarga todos los registros de todas las tiendas",
+                        key="download_confirmed"
+                    )
         
         # Mostrar resumen de lo que se va a descargar
         st.info(f"📊 El archivo incluirá: {len(st.session_state.records)} registros de todas las tiendas")
@@ -683,12 +725,24 @@ with col1:
 
 with col2:
     if st.session_state.records:
+        # Botón de reinicio con protección por contraseña
         if st.button("🔄 Reiniciar Todos los Datos", type="primary", key="reset_all"):
-            st.session_state.records = []
-            # GUARDAR LISTA VACÍA
-            if guardar_registros():
-                st.success("✅ Todos los datos han sido eliminados permanentemente")
-            st.rerun()
+            st.session_state.mostrar_modal_reinicio = True
+        
+        if st.session_state.get('mostrar_modal_reinicio', False):
+            with st.container():
+                st.markdown("---")
+                st.subheader("🔒 Reiniciar Todos los Datos")
+                st.warning("⚠️ **ADVERTENCIA:** Esta acción eliminará PERMANENTEMENTE todos los registros. Esta acción NO se puede deshacer.")
+                
+                if mostrar_modal_contraseña("Reiniciar Todos los Datos"):
+                    st.session_state.mostrar_modal_reinicio = False
+                    if st.button("✅ CONFIRMAR ELIMINACIÓN TOTAL", type="primary", key="confirm_reset"):
+                        st.session_state.records = []
+                        # GUARDAR LISTA VACÍA
+                        if guardar_registros():
+                            st.success("✅ Todos los datos han sido eliminados permanentemente")
+                        st.rerun()
     else:
         st.info("No hay datos para reiniciar")
 
