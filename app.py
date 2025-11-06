@@ -681,33 +681,28 @@ with col1:
         
         # Modal para descarga
         if st.session_state.mostrar_modal_descarga:
-            with st.container():
-                st.markdown("---")
-                st.subheader("🔒 Descargar Excel Completo")
-                contraseña = st.text_input("Ingrese la contraseña:", type="password", key="contraseña_descarga")
-                
-                col1, col2, col3 = st.columns([1, 1, 2])
-                with col1:
-                    if st.button("✅ Aceptar", key="aceptar_descarga"):
-                        if contraseña == "demanda2025":
-                            st.session_state.mostrar_modal_descarga = False
-                            st.success("✅ Contraseña correcta - Descargando archivo...")
-                            # Descargar el archivo inmediatamente
-                            st.download_button(
-                                label="⬇️ Haga clic aquí si la descarga no inicia automáticamente",
-                                data=output,
-                                file_name=f"registro_clientes_completo_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                key="download_auto"
-                            )
-                            st.rerun()
-                        else:
-                            st.error("❌ Contraseña incorrecta")
-                
-                with col2:
-                    if st.button("❌ Cancelar", key="cancelar_descarga"):
-                        st.session_state.mostrar_modal_descarga = False
-                        st.rerun()
+            st.markdown("---")
+            st.subheader("🔒 Descargar Excel Completo")
+            contraseña = st.text_input("Ingrese la contraseña:", type="password", key="contraseña_descarga")
+            
+            if st.button("✅ Confirmar Descarga", key="confirmar_descarga"):
+                if contraseña == "demanda2025":
+                    st.session_state.mostrar_modal_descarga = False
+                    st.success("✅ Contraseña correcta - Descargando archivo...")
+                    # Descargar el archivo inmediatamente
+                    st.download_button(
+                        label="⬇️ Haga clic aquí para descargar",
+                        data=output,
+                        file_name=f"registro_clientes_completo_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="download_final"
+                    )
+                else:
+                    st.error("❌ Contraseña incorrecta")
+            
+            if st.button("❌ Cancelar", key="cancelar_descarga"):
+                st.session_state.mostrar_modal_descarga = False
+                st.rerun()
         
         # Mostrar resumen de lo que se va a descargar
         st.info(f"📊 El archivo incluirá: {len(st.session_state.records)} registros de todas las tiendas")
@@ -724,30 +719,26 @@ with col2:
         
         # Modal para reinicio
         if st.session_state.mostrar_modal_reinicio:
-            with st.container():
-                st.markdown("---")
-                st.subheader("🔒 Reiniciar Todos los Datos")
-                st.warning("⚠️ **ADVERTENCIA:** Esta acción eliminará PERMANENTEMENTE todos los registros. Esta acción NO se puede deshacer.")
-                
-                contraseña = st.text_input("Ingrese la contraseña:", type="password", key="contraseña_reinicio")
-                
-                col1, col2, col3 = st.columns([1, 1, 2])
-                with col1:
-                    if st.button("✅ Confirmar Reinicio", type="primary", key="confirmar_reinicio"):
-                        if contraseña == "demanda2025":
-                            st.session_state.records = []
-                            # GUARDAR LISTA VACÍA
-                            if guardar_registros():
-                                st.success("✅ Todos los datos han sido eliminados permanentemente")
-                            st.session_state.mostrar_modal_reinicio = False
-                            st.rerun()
-                        else:
-                            st.error("❌ Contraseña incorrecta")
-                
-                with col2:
-                    if st.button("❌ Cancelar", key="cancelar_reinicio"):
-                        st.session_state.mostrar_modal_reinicio = False
-                        st.rerun()
+            st.markdown("---")
+            st.subheader("🔒 Reiniciar Todos los Datos")
+            st.warning("⚠️ **ADVERTENCIA:** Esta acción eliminará PERMANENTEMENTE todos los registros. Esta acción NO se puede deshacer.")
+            
+            contraseña = st.text_input("Ingrese la contraseña:", type="password", key="contraseña_reinicio")
+            
+            if st.button("✅ Confirmar Reinicio", type="primary", key="confirmar_reinicio"):
+                if contraseña == "demanda2025":
+                    st.session_state.records = []
+                    # GUARDAR LISTA VACÍA
+                    if guardar_registros():
+                        st.success("✅ Todos los datos han sido eliminados permanentemente")
+                    st.session_state.mostrar_modal_reinicio = False
+                    st.rerun()
+                else:
+                    st.error("❌ Contraseña incorrecta")
+            
+            if st.button("❌ Cancelar", key="cancelar_reinicio"):
+                st.session_state.mostrar_modal_reinicio = False
+                st.rerun()
     else:
         st.info("No hay datos para reiniciar")
 
