@@ -72,6 +72,19 @@ def cargar_registros():
         st.sidebar.error(f"❌ Error al cargar: {str(e)}")
     return []
 
+# FUNCIONES AUXILIARES - DEFINIDAS AL INICIO
+def calcular_porcentaje(tickets, clientes):
+    try:
+        if clientes == 0:
+            return 0
+        return int((tickets / clientes) * 100)
+    except:
+        return 0
+
+def obtener_valor_seguro(record, campo, default=0):
+    """Obtener valor de un campo de manera segura"""
+    return record.get(campo, default)
+
 # INICIALIZACIÓN CRÍTICA - CORREGIDA
 if 'records' not in st.session_state:
     st.session_state.records = cargar_registros()
@@ -181,6 +194,10 @@ def delete_record(index):
             st.success(f"🗑️ Eliminado: {deleted.get('seller', 'N/A')}")
         return True
     return False
+
+def formatear_registro_para_mostrar(index):
+    record = st.session_state.records[index]
+    return f"{record.get('seller', 'N/A')} - {record.get('date', 'N/A')} - {record.get('count', 0)} clientes"
 
 # Sidebar para nuevo registro
 with st.sidebar:
@@ -292,11 +309,7 @@ with col1:
             indices_tienda = [i for i, r in enumerate(st.session_state.records) if r.get('tienda') == tienda_actual]
             
             if indices_tienda:
-                def formatear_registro(index):
-                    r = st.session_state.records[index]
-                    return f"{r.get('seller', 'N/A')} - {r.get('date', 'N/A')} - {r.get('count', 0)} clientes"
-                
-                record_index = st.selectbox("Selecciona registro:", options=indices_tienda, format_func=formatear_registro)
+                record_index = st.selectbox("Selecciona registro:", options=indices_tienda, format_func=formatear_registro_para_mostrar)
                 if st.button("Eliminar Registro Seleccionado", type="secondary"):
                     delete_record(record_index)
                     st.rerun()
@@ -341,15 +354,6 @@ with col2:
     else:
         st.info("No hay estadísticas para esta tienda")
 
-# Funciones auxiliares
-def calcular_porcentaje(tickets, clientes):
-    try:
-        if clientes == 0:
-            return 0
-        return int((tickets / clientes) * 100)
-    except:
-        return 0
-
 # HERRAMIENTAS DE DEPURACIÓN
 with st.expander("🔧 HERRAMIENTAS DE DIAGNÓSTICO", expanded=False):
     st.subheader("Depuración de Datos")
@@ -374,10 +378,43 @@ with st.expander("🔧 HERRAMIENTAS DE DIAGNÓSTICO", expanded=False):
                         datos = json.load(f)
                     st.success(f"✅ Archivo OK: {len(datos)} registros")
                     st.write(f"**Ruta:** {ruta}")
+                    
+                    # Mostrar diferencias entre memoria y archivo
+                    if len(datos) != len(st.session_state.records):
+                        st.warning(f"⚠️ Diferencia: {len(datos)} en archivo vs {len(st.session_state.records)} en memoria")
                 except Exception as e:
                     st.error(f"❌ Error: {e}")
             else:
                 st.warning("⚠️ Archivo no existe")
+
+# SOLUCIÓN PARA EL PROBLEMA DE TIENDAS
+with st.expander("🛠️ SOLUCIONADOR DE PROBLEMAS", expanded=False):
+    st.subheader("Corrección de Datos")
+    
+    # Mostrar todas las tiendas en registros vs Excel
+    if st.session_state.records:
+        tiendas_en_registros = list(set([r.get('tienda', 'SIN_TIENDA') for r in st.session_state.records]))
+        tiendas_en_excel = obtener_tiendas()
+        
+        st.write("**Comparación Tiendas - Registros vs Excel:**")
+        col_comp1, col_comp2 = st.columns(2)
+        
+        with col_comp1:
+            st.write("**En Registros:**")
+            for tienda in sorted(tiendas_en_registros)[:10]:
+                st.write(f"- {tienda}")
+        
+        with col_comp2:
+            st.write("**En Excel:**")
+            for tienda in sorted(tiendas_en_excel)[:10]:
+                st.write(f"- {tienda}")
+        
+        # Encontrar diferencias
+        diferencias = set(tiendas_en_registros) - set(tiendas_en_excel)
+        if diferencias:
+            st.warning(f"⚠️ Tiendas en registros que NO están en Excel: {len(diferencias)}")
+            for diff in sorted(diferencias)[:5]:
+                st.write(f"- {diff}")
 
 # Footer
 st.markdown("---")
