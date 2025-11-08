@@ -33,39 +33,45 @@ RANGOS_HORARIO = [
     "9 p.m - 10 p.m"
 ]
 
-# ARCHIVO PERSISTENTE - SOLUCIÓN MULTI-PESTAÑA
+# RUTA PERSISTENTE MEJORADA
 def obtener_ruta_archivo():
-    """Obtener ruta de archivo persistente"""
-    directorio_datos = "./datos_app"
+    """Obtener ruta de archivo persistente - MEJORADA"""
+    # Usar directorio de trabajo actual
+    directorio_datos = "./datos_persistentes"
     if not os.path.exists(directorio_datos):
-        os.makedirs(directorio_datos)
+        os.makedirs(directorio_datos, exist_ok=True)
     return os.path.join(directorio_datos, 'registros_clientes_viale.json')
 
-def guardar_registros():
-    """Guardar registros permanentemente"""
+def guardar_registros(registros):
+    """Guardar registros permanentemente - MEJORADA"""
     try:
         ruta_archivo = obtener_ruta_archivo()
+        # Guardar con formato seguro
         with open(ruta_archivo, 'w', encoding='utf-8') as f:
-            json.dump(st.session_state.records, f, ensure_ascii=False, indent=2)
+            json.dump(registros, f, ensure_ascii=False, indent=2, default=str)
         return True
     except Exception as e:
-        st.error(f"❌ Error al guardar datos: {str(e)}")
+        st.error(f"❌ Error crítico al guardar datos: {str(e)}")
         return False
 
 def cargar_registros():
-    """Cargar registros guardados - SIEMPRE desde archivo"""
+    """Cargar registros guardados - MEJORADA con manejo robusto"""
     try:
         ruta_archivo = obtener_ruta_archivo()
         if os.path.exists(ruta_archivo):
             with open(ruta_archivo, 'r', encoding='utf-8') as f:
                 registros = json.load(f)
                 if isinstance(registros, list):
+                    st.sidebar.success(f"💾 {len(registros)} registros cargados desde archivo")
                     return registros
                 else:
+                    st.warning("⚠️ Formato de archivo inválido, iniciando con lista vacía")
                     return []
-        return []
+        else:
+            st.sidebar.info("📝 No se encontró archivo previo, iniciando nuevo registro")
+            return []
     except Exception as e:
-        st.error(f"❌ Error al cargar: {str(e)}")
+        st.error(f"❌ Error al cargar archivo: {str(e)}")
         return []
 
 # FUNCIONES AUXILIARES
@@ -80,17 +86,26 @@ def calcular_porcentaje(tickets, clientes):
 def obtener_valor_seguro(record, campo, default=0):
     return record.get(campo, default)
 
-# INICIALIZACIÓN - SOLUCIÓN PARA MÚLTIPLES PESTAÑAS
-if 'records' not in st.session_state:
-    st.session_state.records = cargar_registros()
-    if st.session_state.records:
-        st.sidebar.success(f"💾 {len(st.session_state.records)} registros cargados")
+# INICIALIZACIÓN ROBUSTA - SIEMPRE CARGAR DESDE ARCHIVO
+def inicializar_datos():
+    """Inicializar datos siempre desde archivo - SOLUCIÓN DEFINITIVA"""
+    registros = cargar_registros()
+    
+    # Verificar si session_state necesita actualización
+    if 'records' not in st.session_state or st.session_state.records != registros:
+        st.session_state.records = registros
+    
+    return registros
 
-# Función para ACTUALIZAR session_state desde archivo
+# Inicializar la aplicación
+registros_iniciales = inicializar_datos()
+
+# Función para ACTUALIZAR desde archivo
 def actualizar_desde_archivo():
-    """Forzar actualización desde archivo"""
+    """Forzar actualización desde archivo - MEJORADA"""
     registros_actuales = cargar_registros()
     st.session_state.records = registros_actuales
+    st.success(f"✅ Sincronizado: {len(registros_actuales)} registros")
     return registros_actuales
 
 # Inicializar estados de sesión para los modales
@@ -112,7 +127,6 @@ def cargar_datos_tiendas():
     """Cargar datos de tiendas y vendedores"""
     try:
         df = pd.read_excel("Asesores.xlsx")
-        st.success("📁 Archivo cargado: Asesores.xlsx")
         return df
     except Exception as e:
         st.error(f"❌ Error al cargar Excel: {str(e)}")
@@ -127,9 +141,9 @@ df_tiendas = cargar_datos_tiendas()
 
 # Mostrar información del archivo cargado
 if 'Tienda' in df_tiendas.columns and 'Vendedor' in df_tiendas.columns:
-    st.success(f"✅ {len(df_tiendas)} registros de tiendas y vendedores")
+    st.sidebar.success(f"✅ {len(df_tiendas)} registros de tiendas cargados")
     
-    with st.expander("📊 RESUMEN DE DATOS CARGADOS"):
+    with st.expander("📊 RESUMEN DE DATOS CARGADOS", expanded=False):
         st.write(f"**Tiendas únicas en Excel:** {len(df_tiendas['Tienda'].unique())}")
         st.write(f"**Vendedores únicos:** {len(df_tiendas['Vendedor'].unique())}")
         
@@ -152,8 +166,9 @@ def obtener_vendedores_por_tienda(tienda_seleccionada):
         return ["Selecciona tienda"]
     return ["Error"]
 
-# FUNCIÓN MODIFICADA: Guardar y actualizar inmediatamente
+# FUNCIÓN CRÍTICA MEJORADA: Guardar permanentemente
 def add_record(tienda, vendedor, rango_horario, date_str, count, tickets, soles):
+    """Guardar registro - SOLUCIÓN PERSISTENTE MEJORADA"""
     record = {
         'tienda': tienda,
         'seller': vendedor,
@@ -165,44 +180,37 @@ def add_record(tienda, vendedor, rango_horario, date_str, count, tickets, soles)
         'timestamp': datetime.now().isoformat()
     }
     
-    # CARGAR REGISTROS ACTUALES desde archivo (no confiar en session_state)
+    # SIEMPRE cargar desde archivo primero para evitar conflictos
     registros_actuales = cargar_registros()
     registros_actuales.append(record)
     
-    # Guardar en archivo
-    try:
-        ruta_archivo = obtener_ruta_archivo()
-        with open(ruta_archivo, 'w', encoding='utf-8') as f:
-            json.dump(registros_actuales, f, ensure_ascii=False, indent=2)
-        
-        # ACTUALIZAR session_state
+    # Guardar en archivo inmediatamente
+    if guardar_registros(registros_actuales):
+        # Actualizar session_state solo después de guardar exitosamente
         st.session_state.records = registros_actuales
-        st.success(f"✅ Guardado: {tienda} - {vendedor} - {rango_horario} - {count} clientes - {tickets} tickets - S/. {soles}")
+        st.success(f"✅ Guardado permanentemente: {tienda} - {vendedor} - {rango_horario}")
         return True
-    except Exception as e:
-        st.error(f"❌ Error al guardar: {str(e)}")
+    else:
+        st.error("❌ Error crítico: No se pudo guardar el registro")
         return False
 
-# FUNCIÓN MODIFICADA: Eliminar y actualizar inmediatamente
+# FUNCIÓN CRÍTICA MEJORADA: Eliminar permanentemente
 def delete_record(index):
-    # CARGAR REGISTROS ACTUALES desde archivo
+    """Eliminar registro - SOLUCIÓN PERSISTENTE MEJORADA"""
+    # SIEMPRE cargar desde archivo primero
     registros_actuales = cargar_registros()
     
     if 0 <= index < len(registros_actuales):
         deleted = registros_actuales.pop(index)
         
-        # Guardar en archivo
-        try:
-            ruta_archivo = obtener_ruta_archivo()
-            with open(ruta_archivo, 'w', encoding='utf-8') as f:
-                json.dump(registros_actuales, f, ensure_ascii=False, indent=2)
-            
-            # ACTUALIZAR session_state
+        # Guardar en archivo inmediatamente
+        if guardar_registros(registros_actuales):
+            # Actualizar session_state solo después de guardar exitosamente
             st.session_state.records = registros_actuales
-            st.success(f"🗑️ Eliminado: {deleted.get('seller', 'N/A')} - {deleted.get('date', 'N/A')}")
+            st.success(f"🗑️ Eliminado permanentemente: {deleted.get('seller', 'N/A')}")
             return True
-        except Exception as e:
-            st.error(f"❌ Error al guardar: {str(e)}")
+        else:
+            st.error("❌ Error crítico: No se pudo eliminar el registro")
             return False
     return False
 
@@ -218,7 +226,7 @@ def formatear_registro_para_mostrar(index):
 
 # FUNCIONES DE ESTADÍSTICAS MEJORADAS
 def get_stats_por_tienda(tienda_seleccionada):
-    """Obtener estadísticas solo para la tienda seleccionada - MEJORADA"""
+    """Obtener estadísticas solo para la tienda seleccionada"""
     if not st.session_state.records:
         return {
             'total_clients': 0,
@@ -340,7 +348,7 @@ def get_stats_por_tienda(tienda_seleccionada):
     }
 
 def get_stats_general():
-    """Obtener estadísticas de todas las tiendas - MEJORADA"""
+    """Obtener estadísticas de todas las tiendas"""
     if not st.session_state.records:
         return {
             'total_clients': 0,
@@ -461,8 +469,8 @@ with st.sidebar:
         
         if st.button("💾 Guardar Registro", type="primary", use_container_width=True):
             if vendedor_seleccionado not in ["No hay vendedores", "Selecciona tienda", "Error"]:
-                add_record(tienda_seleccionada, vendedor_seleccionado, rango_horario, fecha.isoformat(), count, tickets, soles)
-                st.rerun()
+                if add_record(tienda_seleccionada, vendedor_seleccionado, rango_horario, fecha.isoformat(), count, tickets, soles):
+                    st.rerun()
             else:
                 st.error("❌ Selecciona un vendedor válido")
 
@@ -471,8 +479,7 @@ with st.sidebar:
     st.header("🔄 SINCRONIZACIÓN")
     
     if st.button("🔄 Actualizar desde Archivo", use_container_width=True):
-        registros_actualizados = actualizar_desde_archivo()
-        st.success(f"✅ Sincronizado: {len(registros_actualizados)} registros")
+        actualizar_desde_archivo()
         st.rerun()
     
     # BOTÓN PARA RECARGAR DATOS
@@ -482,6 +489,13 @@ with st.sidebar:
     
     # Información de estado
     st.info(f"**Registros en memoria:** {len(st.session_state.records)}")
+    
+    # Información del archivo
+    ruta_archivo = obtener_ruta_archivo()
+    if os.path.exists(ruta_archivo):
+        st.success("💾 Archivo de datos: PRESENTE")
+    else:
+        st.warning("📝 Archivo de datos: Por crear")
 
 # Layout principal
 col1, col2 = st.columns([2, 1])
@@ -495,7 +509,6 @@ with col1:
     # BOTÓN PARA FORZAR ACTUALIZACIÓN
     if st.button("🔄 Actualizar Vista", key="actualizar_vista"):
         actualizar_desde_archivo()
-        st.success("✅ Vista actualizada")
         st.rerun()
     
     if st.session_state.records:
@@ -550,8 +563,8 @@ with col1:
             if indices_tienda:
                 record_index = st.selectbox("Selecciona registro:", options=indices_tienda, format_func=formatear_registro_para_mostrar)
                 if st.button("Eliminar Registro Seleccionado", type="secondary"):
-                    delete_record(record_index)
-                    st.rerun()
+                    if delete_record(record_index):
+                        st.rerun()
         else:
             st.warning(f"⚠️ No hay registros para la tienda '{tienda_actual}'")
     else:
@@ -797,10 +810,10 @@ with st.expander("🔄 HERRAMIENTAS DE GESTIÓN", expanded=False):
             eliminados = registros_originales - registros_nuevos
             
             # Guardar cambios
-            if guardar_registros():
+            if guardar_registros(st.session_state.records):
                 st.success(f"✅ Se eliminaron {eliminados} registros antiguos")
             st.rerun()
 
 # Footer
 st.markdown("---")
-st.markdown("**📱 App Web de Registro de Clientes** - *Sistema multi-pestaña con estadísticas avanzadas*")
+st.markdown("**📱 App Web de Registro de Clientes** - *Sistema persistente multi-pestaña*")
